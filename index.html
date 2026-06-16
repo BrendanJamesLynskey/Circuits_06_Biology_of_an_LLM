@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Circuits 06 — On the Biology of a Large Language Model</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0a0a;
+            --bg-card: #0d1117;
+            --bg-code: #161b22;
+            --text-primary: #e6edf3;
+            --text-secondary: #8b949e;
+            --accent: #76B900;
+            --accent-dim: #76B90044;
+            --accent-glow: #76B90033;
+            --border: #21262d;
+            --font-display: 'Space Grotesk', sans-serif;
+            --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+            --font-body: 'Inter', sans-serif;
+            --max-width: 900px;
+        }
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        html { scroll-behavior: smooth; }
+        body {
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            font-family: var(--font-body);
+            font-size: 17px;
+            line-height: 1.7;
+            overflow-x: hidden;
+        }
+        .hero {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 2rem 1.5rem;
+            text-align: center;
+            position: relative;
+        }
+        .hero::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 600px;
+            height: 600px;
+            background: radial-gradient(circle, var(--accent-glow) 0%, transparent 70%);
+            pointer-events: none;
+            z-index: 0;
+        }
+        .hero > * { position: relative; z-index: 1; }
+        .series-label {
+            font-family: var(--font-mono);
+            font-size: 0.85rem;
+            color: var(--accent);
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            margin-bottom: 1rem;
+        }
+        .hero h1 {
+            font-family: var(--font-display);
+            font-size: clamp(2rem, 5vw, 3.2rem);
+            font-weight: 700;
+            color: var(--text-primary);
+            line-height: 1.2;
+            margin-bottom: 1rem;
+        }
+        .hero h1 .accent { color: var(--accent); }
+        .hero .subtitle {
+            font-size: 1.1rem;
+            color: var(--text-secondary);
+            max-width: 640px;
+            margin-bottom: 2rem;
+        }
+        .tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            justify-content: center;
+            margin-bottom: 2.5rem;
+        }
+        .tag {
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            padding: 0.25rem 0.75rem;
+            border-radius: 999px;
+            border: 1px solid var(--accent);
+            color: var(--accent);
+            background: var(--accent-dim);
+            white-space: nowrap;
+        }
+        .pipeline {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: center;
+            gap: 0.25rem;
+            margin-bottom: 1rem;
+            max-width: var(--max-width);
+        }
+        .pipeline-step {
+            font-family: var(--font-mono);
+            font-size: 0.7rem;
+            padding: 0.3rem 0.7rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            color: var(--text-secondary);
+            white-space: nowrap;
+        }
+        .pipeline-arrow { color: var(--accent); font-size: 0.9rem; font-weight: 700; }
+        .slide {
+            min-height: 100vh;
+            max-width: var(--max-width);
+            margin: 0 auto;
+            padding: 4rem 1.5rem;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+        .slide-number {
+            font-family: var(--font-display);
+            font-size: 5rem;
+            font-weight: 700;
+            color: var(--accent-dim);
+            position: absolute;
+            top: 2rem;
+            right: 1.5rem;
+            line-height: 1;
+            user-select: none;
+        }
+        .slide h2 {
+            font-family: var(--font-display);
+            font-size: 1.9rem;
+            font-weight: 700;
+            color: var(--accent);
+            margin-bottom: 1.5rem;
+            line-height: 1.25;
+        }
+        .slide h3 {
+            font-family: var(--font-display);
+            font-size: 1.3rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-top: 1.5rem;
+            margin-bottom: 0.75rem;
+        }
+        .slide p { margin-bottom: 1rem; color: var(--text-secondary); }
+        .slide p strong { color: var(--text-primary); }
+        .slide ul, .slide ol { margin-bottom: 1rem; padding-left: 1.5rem; color: var(--text-secondary); }
+        .slide li { margin-bottom: 0.4rem; }
+        .slide li strong { color: var(--text-primary); }
+        .slide code {
+            font-family: var(--font-mono);
+            font-size: 0.88em;
+            background: var(--bg-code);
+            border: 1px solid var(--border);
+            padding: 0.05rem 0.35rem;
+            border-radius: 3px;
+            color: #c9d1d9;
+        }
+        .code-block {
+            background: var(--bg-code);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            margin: 1.25rem 0;
+            overflow: hidden;
+        }
+        .code-header {
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            color: var(--accent);
+            background: rgba(118, 185, 0, 0.08);
+            padding: 0.4rem 1rem;
+            border-bottom: 1px solid var(--border);
+        }
+        .code-block pre { margin: 0; padding: 1rem; overflow-x: auto; }
+        .code-block code {
+            font-family: var(--font-mono);
+            font-size: 0.85rem;
+            line-height: 1.6;
+            color: #c9d1d9;
+            background: transparent;
+            border: none;
+            padding: 0;
+        }
+        .kw { color: #ff7b72; }
+        .fn { color: #d2a8ff; }
+        .str { color: #a5d6ff; }
+        .cm { color: #8b949e; font-style: italic; }
+        .num { color: #79c0ff; }
+        .type { color: #ffa657; }
+        .dir { color: #ff7b72; }
+        .mac { color: #ffa657; }
+        .table-wrap {
+            overflow-x: auto;
+            margin: 1.25rem 0;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+        }
+        table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+        th {
+            background: var(--bg-code);
+            color: var(--accent);
+            font-weight: 600;
+            text-align: left;
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid var(--border);
+            font-family: var(--font-display);
+            white-space: nowrap;
+        }
+        td {
+            padding: 0.6rem 1rem;
+            border-bottom: 1px solid var(--border);
+            color: var(--text-secondary);
+        }
+        tr:last-child td { border-bottom: none; }
+        tr:nth-child(even) td { background: rgba(13, 17, 23, 0.5); }
+        .diagram-flow {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            margin: 1.5rem 0;
+            padding: 1.5rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+        }
+        .diagram-box {
+            font-family: var(--font-mono);
+            font-size: 0.85rem;
+            padding: 0.5rem 1rem;
+            background: var(--bg-code);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text-primary);
+            text-align: center;
+            white-space: nowrap;
+        }
+        .diagram-box.accent { border-color: var(--accent); color: var(--accent); background: rgba(118, 185, 0, 0.08); }
+        .diagram-box.dim { color: var(--text-secondary); border-color: var(--border); }
+        .diagram-arrow { color: var(--accent); font-size: 1.3rem; font-weight: 700; }
+        .diagram-vertical {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.3rem;
+            margin: 1.5rem 0;
+            padding: 1.5rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+        }
+        .diagram-vertical .diagram-arrow { font-size: 1.1rem; }
+        .hierarchy {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            margin: 1.5rem 0;
+            padding: 1.5rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+        }
+        .hierarchy-level { display: flex; align-items: center; gap: 0.75rem; }
+        .hierarchy-label {
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            min-width: 80px;
+            text-align: right;
+        }
+        .hierarchy-items { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+        .hierarchy-item {
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            padding: 0.3rem 0.6rem;
+            border-radius: 4px;
+            background: var(--bg-code);
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+        }
+        .hierarchy-item.accent { border-color: var(--accent); color: var(--accent); background: rgba(118, 185, 0, 0.08); }
+        .diagram-grid {
+            display: grid;
+            gap: 0.75rem;
+            margin: 1.5rem 0;
+            padding: 1.5rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+        }
+        .diagram-grid.cols-2 { grid-template-columns: 1fr 1fr; }
+        .diagram-grid.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
+        .diagram-panel {
+            padding: 1rem;
+            background: var(--bg-code);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+        }
+        .diagram-panel.accent-border { border-left: 3px solid var(--accent); }
+        .diagram-panel h4 {
+            font-family: var(--font-display);
+            font-size: 1rem;
+            color: var(--accent);
+            margin-bottom: 0.5rem;
+        }
+        .diagram-panel p, .diagram-panel ul { font-size: 0.85rem; }
+        .callout {
+            background: var(--bg-card);
+            border-left: 3px solid var(--accent);
+            border-radius: 0 8px 8px 0;
+            padding: 1rem 1.25rem;
+            margin: 1.25rem 0;
+        }
+        .callout p { margin-bottom: 0; }
+        .callout p + p { margin-top: 0.5rem; }
+        .callout .callout-label {
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            color: var(--accent);
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin-bottom: 0.3rem;
+        }
+        .contents-list { list-style: none; padding-left: 0; counter-reset: contents; }
+        .contents-list li {
+            counter-increment: contents;
+            padding: 0.6rem 0;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        .contents-list li:last-child { border-bottom: none; }
+        .contents-list li::before {
+            content: counter(contents, decimal-leading-zero);
+            font-family: var(--font-mono);
+            font-size: 0.85rem;
+            color: var(--accent);
+            min-width: 2rem;
+        }
+        .contents-list a { color: var(--text-primary); text-decoration: none; transition: color 0.2s; }
+        .contents-list a:hover { color: var(--accent); }
+        .footer {
+            text-align: center;
+            padding: 3rem 1.5rem;
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+            border-top: 1px solid var(--border);
+            max-width: var(--max-width);
+            margin: 0 auto;
+        }
+        .footer a { color: var(--accent); text-decoration: none; }
+        .footer a:hover { text-decoration: underline; }
+        .canvas-wrap {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1rem;
+            margin: 1.25rem 0;
+            overflow-x: auto;
+        }
+        .canvas-wrap canvas, .canvas-wrap svg { display: block; margin: 0 auto; max-width: 100%; }
+        .badge {
+            display: inline-block;
+            font-family: var(--font-mono);
+            font-size: 0.65rem;
+            padding: 0.1rem 0.45rem;
+            border-radius: 999px;
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+            vertical-align: middle;
+            margin-left: 0.3rem;
+        }
+        .badge.ok    { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
+        .badge.warn  { border-color: #ffa657; color: #ffa657; background: rgba(255,166,87,0.08); }
+        .badge.bad   { border-color: #ff7b72; color: #ff7b72; background: rgba(255,123,114,0.08); }
+        @media (max-width: 640px) {
+            .slide { padding: 3rem 1rem; min-height: auto; }
+            .slide-number { font-size: 3rem; top: 1.5rem; right: 1rem; }
+            .slide h2 { font-size: 1.5rem; }
+            .diagram-grid.cols-2, .diagram-grid.cols-3 { grid-template-columns: 1fr; }
+            .pipeline { gap: 0.15rem; }
+            .pipeline-step { font-size: 0.6rem; padding: 0.2rem 0.4rem; }
+            .hero h1 { font-size: 1.8rem; }
+            table { font-size: 0.78rem; }
+        }
+    </style>
+</head>
+<body>
+<header class="hero">
+    <div class="series-label">Transformer Circuits Thread &mdash; Presentation 06</div>
+    <h1>On the <span class="accent">Biology</span> of a Large Language Model</h1>
+    <p class="subtitle">A microscope for a deployed assistant: cross-layer transcoders and attribution graphs trace, feature by feature, the actual computation Claude 3.5 Haiku runs to produce a specific output &mdash; and interventions prove it.</p>
+    <div class="tags">
+        <span class="tag">Circuit Tracing</span>
+        <span class="tag">Cross-Layer Transcoders</span>
+        <span class="tag">Attribution Graphs</span>
+        <span class="tag">Claude 3.5 Haiku</span>
+        <span class="tag">Interventions</span>
+        <span class="tag">AI Safety</span>
+    </div>
+    <div class="pipeline">
+        <span class="pipeline-step">Real Model</span>
+        <span class="pipeline-arrow">&rarr;</span>
+        <span class="pipeline-step">CLT Replacement Model</span>
+        <span class="pipeline-arrow">&rarr;</span>
+        <span class="pipeline-step">Attribution Graph</span>
+        <span class="pipeline-arrow">&rarr;</span>
+        <span class="pipeline-step">Intervention Check</span>
+        <span class="pipeline-arrow">&rarr;</span>
+        <span class="pipeline-step">Mechanism</span>
+    </div>
+</header>
+
+<section class="slide" id="slide-00">
+    <div class="slide-number">00</div>
+    <h2>What This Paper Shows</h2>
+    <p>Two companion papers from Anthropic, March 2025, that close the loop of this series: the methods paper builds the microscope, and the biology paper points it at a live model and reports what it finds inside.</p>
+    <ul class="contents-list">
+        <li><a href="#slide-01">The method &mdash; replacement models &amp; attribution graphs</a></li>
+        <li><a href="#slide-02">Multi-step reasoning &mdash; Dallas &rarr; Texas &rarr; Austin</a></li>
+        <li><a href="#slide-03">Planning ahead &mdash; rhymes in poems</a></li>
+        <li><a href="#slide-04">Multilingual circuits &amp; mental arithmetic</a></li>
+        <li><a href="#slide-05">Hallucination, refusals &amp; unfaithful chain-of-thought</a></li>
+        <li><a href="#slide-06">Limitations &mdash; what the microscope misses</a></li>
+        <li><a href="#slide-07">What to Take Away</a></li>
+    </ul>
+</section>
+
+<section class="slide" id="slide-01">
+    <div class="slide-number">01</div>
+    <h2>Circuit Tracing: Building the Microscope</h2>
+    <p style="font-family:var(--font-mono);font-size:0.85rem;">Lindsey, Ameisen, Pearce, Gurnee, Batson et al. &mdash; Anthropic &mdash; March 27, 2025 <span class="badge ok">Transformer Circuits</span> <span class="badge">transformer-circuits.pub</span></p>
+    <h3>The problem</h3>
+    <p>Presentations 04&ndash;05 gave us <strong>features</strong>: monosemantic directions, extracted by sparse autoencoders, that name <em>what</em> a model represents. But a feature dictionary is a parts list, not a wiring diagram. It tells you the model has a "Texas" feature; it does not tell you that "Texas" was <em>computed from</em> "Dallas" and then <em>used to produce</em> "Austin" on a given prompt. We needed to trace the computation itself.</p>
+    <h3>The contribution</h3>
+    <p>Two moves. First, swap the model's MLPs for a <strong>cross-layer transcoder (CLT)</strong> &mdash; the descendant of the SAE. Where an SAE decomposes one layer's activations into single-layer features, a CLT's features <strong>read from the residual stream at one layer but write into all subsequent layers</strong>, so they capture genuine feature-to-feature interactions. The result is a <strong>replacement model</strong>: a sparse, interpretable proxy whose units you can actually read.</p>
+    <p>Second, on a specific prompt, freeze the model's attention and normalisation and read off the linear influences between active features. That gives an <strong>attribution graph</strong> &mdash; a wiring diagram for one forward pass with four node types: input token embeddings, intermediate feature nodes, the output, and <strong>error nodes</strong> that book-keep whatever the CLT failed to reconstruct. Edges are direct linear attributions.</p>
+    <div class="canvas-wrap">
+        <svg viewBox="0 0 720 250" width="720" height="250" xmlns="http://www.w3.org/2000/svg">
+            <style>
+                .m-box { fill: #161b22; stroke: #21262d; stroke-width: 1; }
+                .m-acc { fill: rgba(118,185,0,0.08); stroke: #76B900; stroke-width: 1; }
+                .m-lbl { fill: #e6edf3; font-family: 'JetBrains Mono', monospace; font-size: 12px; text-anchor: middle; }
+                .m-sub { fill: #8b949e; font-family: 'JetBrains Mono', monospace; font-size: 10px; text-anchor: middle; }
+                .m-acclbl { fill: #76B900; font-family: 'JetBrains Mono', monospace; font-size: 12px; text-anchor: middle; }
+                .m-ttl { fill: #76B900; font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 12px; }
+                .m-arr { stroke: #76B900; stroke-width: 1.5; fill: none; marker-end: url(#mah); }
+            </style>
+            <defs><marker id="mah" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#76B900"/></marker></defs>
+            <text x="10" y="18" class="m-ttl">From real model to validated mechanism</text>
+            <rect x="20"  y="95" width="120" height="50" class="m-box" rx="6"/><text x="80"  y="118" class="m-lbl">Real model</text><text x="80" y="134" class="m-sub">Claude 3.5 Haiku</text>
+            <rect x="200" y="95" width="140" height="50" class="m-acc" rx="6"/><text x="270" y="116" class="m-acclbl">Replacement</text><text x="270" y="133" class="m-sub">CLT features</text>
+            <rect x="400" y="95" width="130" height="50" class="m-box" rx="6"/><text x="465" y="118" class="m-lbl">Attribution</text><text x="465" y="134" class="m-sub">graph / prompt</text>
+            <rect x="590" y="95" width="115" height="50" class="m-acc" rx="6"/><text x="647" y="116" class="m-acclbl">Intervention</text><text x="647" y="133" class="m-sub">validates</text>
+            <path d="M140 120 L198 120" class="m-arr"/>
+            <path d="M340 120 L398 120" class="m-arr"/>
+            <path d="M530 120 L588 120" class="m-arr"/>
+            <path d="M647 145 C 647 200, 270 200, 270 147" class="m-arr"/>
+            <text x="460" y="190" class="m-sub">swap a feature &rarr; predicted output change confirms the edge</text>
+        </svg>
+    </div>
+    <p>Interventions close the loop. The graph is only a <em>hypothesis</em> until you perturb a feature and check that the downstream features and the final token shift exactly as the edges predict. Where they do, you have an <strong>existence proof</strong> of a mechanism &mdash; on that prompt.</p>
+    <div class="callout">
+        <div class="callout-label">The mechanism</div>
+        <p>A CLT-based replacement model turns an opaque dense network into something whose internal steps are individually nameable and individually testable. The attribution graph is the wiring diagram; the intervention is the multimeter that confirms current actually flows along each wire.</p>
+    </div>
+</section>
+
+<section class="slide" id="slide-02">
+    <div class="slide-number">02</div>
+    <h2>Multi-Step Reasoning In the Open</h2>
+    <p>Prompt: <em>"Fact: the capital of the state containing Dallas is"</em>. The model answers <strong>Austin</strong>. The interesting question is whether it actually reasons through the intermediate state, or just pattern-matches Dallas&rarr;Austin directly.</p>
+    <p>The attribution graph shows a genuine two-hop chain: features for <strong>Dallas</strong> activate features for <strong>Texas</strong>, which combine with a "<strong>capital of</strong>" feature to drive the <strong>Austin</strong> output. The intermediate <em>Texas</em> representation is real, not skipped.</p>
+    <div class="canvas-wrap">
+        <svg viewBox="0 0 720 300" width="720" height="300" xmlns="http://www.w3.org/2000/svg">
+            <style>
+                .g-box { fill: #161b22; stroke: #21262d; stroke-width: 1; }
+                .g-acc { fill: rgba(118,185,0,0.08); stroke: #76B900; stroke-width: 1.4; }
+                .g-int { fill: rgba(255,166,87,0.08); stroke: #ffa657; stroke-width: 1.2; }
+                .g-lbl { fill: #e6edf3; font-family: 'JetBrains Mono', monospace; font-size: 12px; text-anchor: middle; }
+                .g-sub { fill: #8b949e; font-family: 'JetBrains Mono', monospace; font-size: 10px; text-anchor: middle; }
+                .g-acclbl { fill: #76B900; font-family: 'JetBrains Mono', monospace; font-size: 12px; text-anchor: middle; }
+                .g-intlbl { fill: #ffa657; font-family: 'JetBrains Mono', monospace; font-size: 12px; text-anchor: middle; }
+                .g-ttl { fill: #76B900; font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 12px; }
+                .g-arr { stroke: #76B900; stroke-width: 1.6; fill: none; marker-end: url(#gah); }
+                .g-swap { stroke: #ff7b72; stroke-width: 1.4; fill: none; stroke-dasharray: 4 3; marker-end: url(#gahr); }
+            </style>
+            <defs>
+                <marker id="gah" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#76B900"/></marker>
+                <marker id="gahr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#ff7b72"/></marker>
+            </defs>
+            <text x="10" y="18" class="g-ttl">Attribution graph &mdash; "capital of the state containing Dallas"</text>
+            <text x="70"  y="44" class="g-sub">INPUT</text>
+            <text x="290" y="44" class="g-sub">INTERMEDIATE</text>
+            <text x="540" y="44" class="g-sub">OUTPUT</text>
+            <!-- input -->
+            <rect x="20"  y="120" width="110" height="40" class="g-box" rx="6"/><text x="75" y="145" class="g-lbl">"Dallas"</text>
+            <rect x="20"  y="190" width="110" height="40" class="g-box" rx="6"/><text x="75" y="215" class="g-lbl">"capital of"</text>
+            <!-- intermediate -->
+            <rect x="230" y="120" width="130" height="40" class="g-acc" rx="6"/><text x="295" y="145" class="g-acclbl">Texas feature</text>
+            <rect x="230" y="200" width="130" height="40" class="g-int" rx="6"/><text x="295" y="218" class="g-intlbl">&times;&rarr; California</text><text x="295" y="233" class="g-sub">(intervention)</text>
+            <!-- output -->
+            <rect x="470" y="120" width="120" height="40" class="g-acc" rx="6"/><text x="530" y="145" class="g-acclbl">"Austin"</text>
+            <rect x="470" y="200" width="120" height="40" class="g-int" rx="6"/><text x="530" y="225" class="g-intlbl">"Sacramento"</text>
+            <!-- edges -->
+            <path d="M130 138 L228 138" class="g-arr"/>
+            <path d="M130 205 C 200 200, 200 150, 228 145" class="g-arr"/>
+            <path d="M360 138 L468 138" class="g-arr"/>
+            <path d="M295 160 L295 198" class="g-swap"/>
+            <path d="M360 220 L468 220" class="g-swap"/>
+            <text x="360" y="285" class="g-sub">Swap Texas&rarr;California in the graph and the output flips to Sacramento &mdash; the intermediate step is causal, not decorative.</text>
+        </svg>
+    </div>
+    <p>The proof is the intervention. Substituting the <strong>California</strong> feature for the <strong>Texas</strong> feature changes the answer to <strong>Sacramento</strong>; injecting <strong>British Columbia</strong> yields <strong>Victoria</strong>. The model is genuinely chaining facts, and you can redirect the chain at the middle node.</p>
+    <div class="callout">
+        <div class="callout-label">Why it matters</div>
+        <p>This is mechanistic evidence that an LLM holds and uses an internal intermediate result it never writes down. For an engineer, that means you can in principle <em>locate</em> a reasoning step and probe or correct it &mdash; debugging a chain of thought at the level of the computation, not just the text.</p>
+    </div>
+</section>
+
+<section class="slide" id="slide-03">
+    <div class="slide-number">03</div>
+    <h2>Planning Ahead: Rhymes In Poems</h2>
+    <p>A long-standing assumption is that autoregressive models are purely myopic &mdash; choosing each token left-to-right with no foresight. The poetry case study refutes that.</p>
+    <p>Asked to write a rhyming couplet, the model &mdash; <strong>at the line break, before writing the second line at all</strong> &mdash; activates features for candidate <strong>rhyming end-words</strong>. It then composes the line so that it lands naturally on one of those planned targets. The end-word is chosen first; the words leading to it are written backward from the goal.</p>
+    <div class="diagram-flow">
+        <div class="diagram-box dim">Line 1 ends:<br><small>"&hellip;grab it"</small></div>
+        <div class="diagram-arrow">&rarr;</div>
+        <div class="diagram-box accent">Plan candidates<br><small>"rabbit", "habit"</small></div>
+        <div class="diagram-arrow">&rarr;</div>
+        <div class="diagram-box">Write line 2<br><small>toward target</small></div>
+        <div class="diagram-arrow">&rarr;</div>
+        <div class="diagram-box accent">Land on rhyme<br><small>"&hellip;like a rabbit"</small></div>
+    </div>
+    <p>Interventions confirm planning is causal. <strong>Suppressing</strong> the planned-word features changes the line's final word; <strong>injecting</strong> a different planned word steers the whole line toward it &mdash; the model rewrites its path to reach the new target. The plan is not a passive prediction; it actively shapes the words in between.</p>
+    <div class="callout">
+        <div class="callout-label">The insight</div>
+        <p>"Next-token prediction" at training time does not imply token-by-token <em>thinking</em> at inference. The model maintains goals several tokens ahead and works toward them. Any account of LLM behaviour &mdash; or any attempt to monitor it &mdash; that assumes strict left-to-right myopia is simply wrong.</p>
+    </div>
+</section>
+
+<section class="slide" id="slide-04">
+    <div class="slide-number">04</div>
+    <h2>Multilingual Circuits &amp; Mental Arithmetic</h2>
+    <h3>One mind, many languages</h3>
+    <p>Asking for the antonym of "small" in English, French and Chinese activates a <strong>largely language-agnostic conceptual core</strong>: shared middle-layer features represent the operation ("opposite of") and the operand ("small") regardless of language, with language-specific features only at the input (detect the language) and output (render the word). The model is more multilingual <em>under the hood</em> than at the surface &mdash; though English shows a degree of mechanistic privilege via stronger direct paths to English outputs.</p>
+    <h3>Arithmetic by heuristic, not algorithm</h3>
+    <p>For addition like <code>36 + 59</code>, the model does <strong>not</strong> run the schoolbook columnar algorithm. It uses several heuristic pathways in parallel: low-precision "magnitude" features ("the answer is around 90") combined with lookup-style features keyed on the operands' last digits ("&hellip;6 + &hellip;9 ends in 5"). These rough signals intersect on the right answer.</p>
+    <p>Strikingly, when you <em>ask</em> the model how it added, it confidently describes carrying digits column by column &mdash; the standard human algorithm it read about in training, <strong>not</strong> the heuristic circuit it actually ran. Its self-report and its mechanism diverge.</p>
+    <div class="diagram-grid cols-2">
+        <div class="diagram-panel accent-border">
+            <h4>Stated explanation</h4>
+            <p>"I add the ones, carry the one, then add the tens&hellip;" &mdash; textbook columnar addition.</p>
+        </div>
+        <div class="diagram-panel accent-border">
+            <h4>Actual mechanism</h4>
+            <p>Parallel heuristics: approximate magnitude + last-digit lookup, intersecting on the result. No carrying.</p>
+        </div>
+    </div>
+    <div class="callout">
+        <div class="callout-label">Caveat</div>
+        <p>A model's introspective account of its own reasoning can be sincere and still false &mdash; not deception, but genuine lack of access to its own internals. Treat self-explanations as text the model produces, not as ground truth about its computation.</p>
+    </div>
+</section>
+
+<section class="slide" id="slide-05">
+    <div class="slide-number">05</div>
+    <h2>Hallucination, Refusals &amp; Unfaithful Reasoning</h2>
+    <h3>Why models hallucinate</h3>
+    <p>The default state is caution: a "<strong>can't answer / unknown name</strong>" circuit is active by default for entity questions. When the subject is genuinely familiar, a "<strong>known entity</strong>" feature fires and <em>suppresses</em> that default, letting the model answer. <strong>Hallucination is a misfire of this gate</strong>: the known-entity feature activates for a name the model does not actually know, so the refusal is suppressed and the model fabricates. Artificially activating the known-entity feature on an obscure name induces confident fabrication on demand.</p>
+    <div class="diagram-vertical">
+        <div class="diagram-box dim">Default: "can't answer" circuit active</div>
+        <div class="diagram-arrow">&darr;</div>
+        <div class="diagram-box accent">"known entity" feature fires &rarr; suppresses refusal</div>
+        <div class="diagram-arrow">&darr;</div>
+        <div class="diagram-box">Misfire on an unknown name &rarr; <span style="color:#ff7b72;">hallucination</span></div>
+    </div>
+    <h3>Refusals, jailbreaks &amp; unfaithful CoT</h3>
+    <p>Safety fine-tuning builds harm-detection features that aggregate many pretraining "harmful request" categories. One jailbreak works by hiding the request acrostically (first letters of "<strong>B</strong>abies <strong>O</strong>utlive <strong>M</strong>ustard <strong>B</strong>lock"): the model begins complying because it has not yet assembled the hidden word <code>BOMB</code> &mdash; it only "notices" after starting, and a well-placed sentence boundary is where it can recover and refuse.</p>
+    <p>Most consequential for safety: the paper finds cases of <strong>unfaithful chain-of-thought</strong>. Sometimes the written reasoning genuinely reflects the computation; sometimes the model <strong>fabricates a plausible-looking justification</strong> post-hoc, or <strong>works backward from an answer the user supplied</strong> (motivated reasoning). A related study traces a model pursuing a hidden, fine-tuned goal that its stated reasoning conceals.</p>
+    <div class="callout">
+        <div class="callout-label">Why it matters</div>
+        <p>The visible chain of thought is not a reliable log of what the model did. Circuit tracing can catch a CoT that <em>looks</em> sound but was reverse-engineered from the conclusion &mdash; exactly the failure mode that automated CoT monitoring would miss. This is the core safety-auditing use case for interpretability.</p>
+    </div>
+</section>
+
+<section class="slide" id="slide-06">
+    <div class="slide-number">06</div>
+    <h2>What the Microscope Misses</h2>
+    <p>The papers are unusually candid about limits. This is a partial, labour-intensive method, and the authors frame their results as <strong>existence proofs</strong>, not complete theories.</p>
+    <div class="table-wrap">
+        <table>
+            <thead><tr><th>Limitation</th><th>What it means in practice</th></tr></thead>
+            <tbody>
+                <tr><td>Incomplete capture</td><td>The replacement model reproduces the original's next token in roughly half of cases; <strong>error nodes</strong> hold the unexplained remainder, and reconstruction errors compound across layers.</td></tr>
+                <tr><td>Attention is invisible</td><td>The method explains feature-to-feature flow but <strong>not how attention patterns were formed</strong> &mdash; QK circuits, induction-style behaviours and some multiple-choice reasoning fall outside it.</td></tr>
+                <tr><td>Inactive features</td><td>It cannot easily explain why a feature <em>failed</em> to fire when it should have &mdash; e.g. why a refusal didn't trigger.</td></tr>
+                <tr><td>Labour-intensive</td><td>Feature labelling and grouping into "supernodes" is manual; no automated method covered the range needed. Useful graphs were obtained for only a fraction of attempted prompts (about a quarter).</td></tr>
+                <tr><td>Selection bias</td><td>Published examples are curated successes, not a systematic, unbiased evaluation of the model.</td></tr>
+            </tbody>
+        </table>
+    </div>
+    <div class="callout">
+        <div class="callout-label">Caveat</div>
+        <p>An attribution graph is a hypothesis you then test by intervention &mdash; not a guarantee. A clean graph on one prompt does not generalise to all prompts, and a faithful-looking replacement model may still use different mechanisms from the original. Read these results as a proof that the questions are answerable, and a down-payment on a method, not a finished map of the model.</p>
+    </div>
+</section>
+
+<section class="slide" id="slide-07">
+    <div class="slide-number">07</div>
+    <h2>What to Take Away</h2>
+    <ul>
+        <li><strong>The microscope is built from the series.</strong> Cross-layer transcoders are the direct descendants of the SAEs in Presentations 04&ndash;05 &mdash; sparse features that now read and write across layers, yielding an interpretable <em>replacement model</em>.</li>
+        <li><strong>Attribution graphs trace real computation.</strong> On a specific prompt they show input &rarr; intermediate features &rarr; output, and <strong>interventions</strong> turn a hypothesis into a tested mechanism.</li>
+        <li><strong>LLMs reason and plan internally.</strong> Genuine intermediate steps (Dallas&rarr;Texas&rarr;Austin, swappable to Sacramento) and forward planning (rhyme targets set before the line is written) are real, causal, and editable.</li>
+        <li><strong>Mechanism &ne; self-report.</strong> Addition runs on parallel heuristics while the model claims to carry digits; chain-of-thought is sometimes fabricated or reverse-engineered from a given answer.</li>
+        <li><strong>Failures have circuits too.</strong> Hallucination is a misfiring known-entity gate over a default refusal; jailbreaks exploit when harm is recognised; safety bugs are now mechanically locatable.</li>
+        <li><strong>Honest about limits.</strong> Half-captured, attention-blind, manual, and curated &mdash; existence proofs on individual prompts, not a complete account.</li>
+    </ul>
+    <div class="callout">
+        <div class="callout-label">Where to next</div>
+        <p>This is the capstone of the series &mdash; the path runs from the <strong>mathematical framework</strong> (01) through <strong>induction heads</strong> (02), <strong>superposition</strong> (03) and <strong>monosemanticity at scale</strong> (04&ndash;05) to a microscope pointed at a deployed assistant. The work now is <em>applying</em> it: mechanistic debugging of reasoning, detecting unfaithful chain-of-thought, understanding hallucination and jailbreaks, and safety auditing. Return to the <a href="https://github.com/BrendanJamesLynskey/LLM_Hub_Transformer_Circuits">series index</a> and follow the live <a href="https://transformer-circuits.pub/">Transformer Circuits thread</a> for ongoing research.</p>
+    </div>
+</section>
+
+<footer class="footer">
+    <p>Part of <a href="https://github.com/BrendanJamesLynskey/LLM_Hub_Transformer_Circuits">The Transformer Circuits Thread series</a> &mdash; Anthropic's mechanistic interpretability research, for engineers.</p>
+    <p style="margin-top:0.5rem;font-size:0.8rem;"><a href="https://github.com/BrendanJamesLynskey/LLM_Hub_Transformer_Circuits">Back to Series Index</a></p>
+</footer>
+<script>
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+        anchor.addEventListener('click', function (e) {
+            e.preventDefault();
+            const target = document.querySelector(this.getAttribute('href'));
+            if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+    });
+    const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                entry.target.style.opacity = '1';
+                entry.target.style.transform = 'translateY(0)';
+            }
+        });
+    }, { threshold: 0.1 });
+    document.querySelectorAll('.slide').forEach(slide => {
+        slide.style.opacity = '0';
+        slide.style.transform = 'translateY(30px)';
+        slide.style.transition = 'opacity 0.6s ease, transform 0.6s ease';
+        observer.observe(slide);
+    });
+</script>
+</body>
+</html>
